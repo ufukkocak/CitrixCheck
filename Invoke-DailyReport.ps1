@@ -474,7 +474,7 @@ $summaryRows = foreach ($r in $results) {
     $icon       = if ($r.HasIssues -and -not $isInfo) { '&#10007;' } else { '&#10003;' }
     $iconColor  = if ($r.HasIssues -and -not $isSup -and -not $isInfo) { '#e74c3c' } elseif ($r.HasIssues -and -not $isInfo) { '#f39c12' } else { '#27ae60' }
     $rowBg      = if ($r.HasIssues -and -not $isSup -and -not $isInfo) { '#fff5f5' } elseif ($r.HasIssues -and -not $isInfo) { '#fffdf0' } else { '' }
-    $resultText = if ($r.HasIssues -and $isSup) { "Issues found <span style='font-size:10px;background:#f39c12;color:#fff;padding:1px 6px;border-radius:8px;font-weight:700'>suppressed</span>" } elseif ($r.HasIssues -and $isInfo) { "OK <span style='font-size:10px;background:#3498db;color:#fff;padding:1px 6px;border-radius:8px;font-weight:700'>informational</span>" } elseif ($r.HasIssues) { 'Issues found' } else { 'OK' }
+    $resultText = if ($r.HasIssues -and $isSup) { "Issues found <span style='font-size:10px;background:#f39c12;color:#fff;padding:1px 6px;border-radius:8px;font-weight:700'>suppressed</span>" } elseif ($isInfo) { "OK <span style='font-size:10px;background:#3498db;color:#fff;padding:1px 6px;border-radius:8px;font-weight:700'>informational</span>" } elseif ($r.HasIssues) { 'Issues found' } else { 'OK' }
     $secHref    = if ($r.SectionKey) { "#section-$($r.SectionKey)" } else { '' }
     $nameCell   = if ($secHref) { "<a href='$secHref' style='color:#2c3e50;text-decoration:none;font-weight:500'>$($r.CheckName)</a>" } else { $r.CheckName }
     @"
@@ -491,9 +491,16 @@ $summaryRows = foreach ($r in $results) {
 $allSections = ($results | ForEach-Object {
     $html      = $_.SectionHtml
     $secId     = if ($_.SectionKey) { "section-$($_.SectionKey)" } else { '' }
-    $initState = if ($_.HasIssues) { '0' } else { '1' }   # start collapsed when all OK
-    $token     = "<div style='margin-bottom:24px;"
-    $pos       = $html.IndexOf($token)
+    $isInfoSec = $_.PSObject.Properties['SectionKey'] -and $_.SectionKey -in $infoOnlyKeys
+    $initState = if ($_.HasIssues -and -not $isInfoSec) { '0' } else { '1' }   # info-only starts collapsed
+    # Replace red/orange issue badges with blue INFORMATIONAL in section headers for info-only checks
+    if ($isInfoSec) {
+        $html = [regex]::Replace($html,
+            "<span style='font-size:12px;background:#(?:e74c3c|f39c12);padding:4px 12px;border-radius:12px;font-weight:700'>[^<]+</span>",
+            "<span style='font-size:12px;background:#3498db;padding:4px 12px;border-radius:12px;font-weight:700'>INFORMATIONAL</span>")
+    }
+    $token = "<div style='margin-bottom:24px;"
+    $pos   = $html.IndexOf($token)
     if ($pos -ge 0) {
         $idAttr = if ($secId) { " id='$secId'" } else { '' }
         $html = $html.Substring(0, $pos + 4) + "$idAttr class='cx-section' data-collapsed='$initState' " + $html.Substring($pos + 4)
