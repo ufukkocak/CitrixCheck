@@ -5,7 +5,7 @@
 ![Citrix CVAD](https://img.shields.io/badge/Citrix-CVAD%20%7C%20PVS%20%7C%20FAS%20%7C%20ADC-452170)
 ![License](https://img.shields.io/badge/License-MIT-22c55e)
 
-**Version:** 1.3.0
+**Version:** 1.4.0
 **Author:** Ufuk Kocak
 **Website:** [horizonconsulting.it](https://horizonconsulting.it)
 **LinkedIn:** [linkedin.com/in/ufukkocak](https://www.linkedin.com/in/ufukkocak)
@@ -18,6 +18,9 @@ A **PowerShell automation tool** that generates a daily HTML health report for *
 
 - **10 checks in one report** — DDC services, VDA health, sessions, licensing, PVS, FAS, NetScaler ADC, XenServer / Citrix Hypervisor, disk space and Event Log
 - **Colour-coded HTML email** with management summary cards, status table and collapsible detail sections
+- **Smart header colour** — green (all OK), orange (1–2 issues), red (3+ issues)
+- **Informational checks** — VDA Health and Session Monitor are treated as informational: they never affect the overall status colour or issue count, and are labelled with a blue *informational* badge throughout the report
+- **NetScaler vServer ignore list** — exclude specific vServers from health checks via `IgnoreVServers` in `config.json` (e.g. redirect vServers that are intentionally DOWN)
 - **Runs fully unattended** via Windows Task Scheduler — no manual steps after initial setup
 - **Each check is standalone** — run any script independently for quick diagnostics
 - **Single config file** — all servers, thresholds, credentials and email settings in `config.json`
@@ -156,7 +159,7 @@ Open `config.json` and verify the following fields:
 - `CVAD.PrimaryController` / `FallbackController` — FQDN of the Delivery Controllers
 - `LicenseServer` — FQDN of the license server
 - `Servers[]` — All servers to monitor with their roles and services
-- `NetScaler[]` — Management IP or hostname per ADC instance
+- `NetScaler[]` — Management IP or hostname per ADC instance. Optionally add `"IgnoreVServers": ["VSERVER_NAME_1", "VSERVER_NAME_2"]` to exclude specific vServers from the health check (e.g. HTTP redirect vServers that are intentionally DOWN)
 - `XenServer.Pools[].Master` — FQDN or IP of each XenServer pool master
 - `Email.To` / `Email.From` / `Email.SmtpServer` — Email delivery settings
 
@@ -311,12 +314,12 @@ The task will then be visible in Task Scheduler under `\CitrixCheck\CitrixCheck 
 | Check | Script | What is monitored |
 |---|---|---|
 | **Infrastructure Services** | `Check-Infrastructure.ps1` | Windows service status on DDCs, StoreFront, PVS, FAS and license server via WinRM |
-| **VDA Health** | `Check-VDAHealth.ps1` | Registration state of all VDAs per Delivery Group via Citrix Broker SDK; reports unregistered and maintenance-mode machines |
-| **Session Monitor** | `Check-Sessions.ps1` | Session counts (active/disconnected) per Delivery Group; flags sessions idle beyond the configured threshold |
+| **VDA Health** | `Check-VDAHealth.ps1` | Registration state of all VDAs per Delivery Group via Citrix Broker SDK; reports unregistered and maintenance-mode machines. **Informational** — does not affect overall report status |
+| **Session Monitor** | `Check-Sessions.ps1` | Session counts (active/disconnected) per Delivery Group; flags sessions idle beyond the configured threshold. **Informational** — does not affect overall report status |
 | **License Usage** | `Check-LicenseUsage.ps1` | License consumption vs. capacity via WMI; alerts on warning and critical threshold breaches |
 | **PVS** | `Check-PVS.ps1` | Server status, vDisk versions, streaming distribution and active devices on all Provisioning Services servers. Connects via SOAP (all servers tried) with WinRM fallback |
 | **FAS** | `Check-FAS.ps1` | Service status (via WinRM) and RA certificate data (expiry, status, CA) from JSON written by `Run-FasCertCheck.ps1` on the FAS servers |
-| **NetScaler** | `Check-NetScaler.ps1` | HA status, vServer state (LB/CS/Gateway) and SSL certificate expiry on all configured ADC instances via the NITRO REST API |
+| **NetScaler** | `Check-NetScaler.ps1` | HA status, vServer state (LB/CS/Gateway) and SSL certificate expiry on all configured ADC instances via the NITRO REST API. Supports `IgnoreVServers` per instance to exclude intentionally DOWN vServers |
 | **XenServer** | `Check-XenServer.ps1` | Host uptime, CPU and memory usage (via RRD), VM distribution per host, pool master detection and Storage Repository usage |
 | **Disk Space** | `Check-DiskSpace.ps1` | Free disk space on all Citrix servers; warning and critical based on configured thresholds |
 | **Event Log** | `Check-EventLog.ps1` | Errors and warnings in the System and Application event logs from the past 24 hours on all servers |
@@ -335,8 +338,8 @@ The task will then be visible in Task Scheduler under `\CitrixCheck\CitrixCheck 
 
 The generated HTML report contains:
 
-1. **Header** — date, environment name and overall status (green/red)
-2. **Summary bar** — total checks, passed, failed
+1. **Header** — date, environment name and overall status: green (all OK), orange (1–2 issues), red (3+ issues)
+2. **Summary bar** — total checks, passed, with issues (informational checks excluded from count)
 3. **Management Summary** — clickable cards per component:
    - DDC, StoreFront, Lic. Server, Lic. Usage, VDA, Sessions, PVS, FAS, NetScaler, XenServer, Disk, Events
 4. **Check overview table** — one row per check with result and summary (clickable)
