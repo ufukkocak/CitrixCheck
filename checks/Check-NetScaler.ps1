@@ -224,11 +224,11 @@ function _QueryNSInstance {
         $webSession = $null   # markeer als uitgelogd zodat catch-block het niet opnieuw doet
 
         # Filter vServers listed in IgnoreVServers (e.g. redirect vServers that are intentionally DOWN)
-        $ignoreVSrvs = if ($NsCfg.PSObject.Properties['IgnoreVServers']) { @($NsCfg.IgnoreVServers) } else { @() }
+        $ignoreVSrvs = if ($NsCfg.PSObject.Properties['IgnoreVServers']) { @($NsCfg.IgnoreVServers | ForEach-Object { "$_".Trim() }) } else { @() }
         if ($ignoreVSrvs.Count -gt 0) {
-            $lbVSrvs  = @($lbVSrvs  | Where-Object { $_.name -notin $ignoreVSrvs })
-            $csVSrvs  = @($csVSrvs  | Where-Object { $_.name -notin $ignoreVSrvs })
-            $vpnVSrvs = @($vpnVSrvs | Where-Object { $_.name -notin $ignoreVSrvs })
+            $lbVSrvs  = @($lbVSrvs  | Where-Object { $ignoreVSrvs -inotcontains $_.name })
+            $csVSrvs  = @($csVSrvs  | Where-Object { $ignoreVSrvs -inotcontains $_.name })
+            $vpnVSrvs = @($vpnVSrvs | Where-Object { $ignoreVSrvs -inotcontains $_.name })
         }
 
         $downVSrvs    = @(($lbVSrvs + $csVSrvs + $vpnVSrvs) | Where-Object { $_.state -ne 'UP' })

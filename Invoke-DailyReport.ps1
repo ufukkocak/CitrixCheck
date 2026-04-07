@@ -376,7 +376,8 @@ $vdaPct  = if ($vdaT -gt 0) { [math]::Round(($vdaR / $vdaT) * 100) } else { 0 }
 $vdaCol  = if ($vdaPct -ge 95) { '#27ae60' } elseif ($vdaPct -ge 85) { '#f39c12' } else { '#e74c3c' }
 $vdaSub2 = if ($vdaU -gt 0) { "<span style='color:#e74c3c;font-weight:600'>$vdaU unregistered</span>" } else { $null }
 $vdaSub3 = if ($vdaM -gt 0) { "<span style='color:#f39c12'>$vdaM in maintenance</span>" } else { $null }
-$cVda    = _MgmtCard 'VDA' "$vdaPct% reg." $vdaCol "$vdaR / $vdaT registered" $vdaSub2 $vdaSub3 '#section-VDAHealth' (_TrendBadge 'VDA Health' $vdaU $prevCounts)
+$infoCardBadge = "<span style='font-size:10px;background:#3498db;color:#fff;padding:1px 5px;border-radius:6px;font-weight:700'>informational</span>"
+$cVda    = _MgmtCard 'VDA' "$vdaPct% reg." $vdaCol "$vdaR / $vdaT registered" $vdaSub2 $vdaSub3 '#section-VDAHealth' ("$infoCardBadge " + (_TrendBadge 'VDA Health' $vdaU $prevCounts))
 
 # Sessions
 $mSess    = if ($rSess) { [regex]::Match($rSess.Summary, '(\d+) session.+?(\d+) active, (\d+) disconnected, (\d+) idle') } else { $null }
@@ -385,7 +386,7 @@ $sA       = if ($mSess -and $mSess.Success) { $mSess.Groups[2].Value } else { '-
 $sD       = if ($mSess -and $mSess.Success) { $mSess.Groups[3].Value } else { '-' }
 $sI       = if ($mSess -and $mSess.Success) { [int]$mSess.Groups[4].Value } else { 0 }
 $sessSub2 = if ($sI -gt 0) { "<span style='color:#e74c3c;font-weight:600'>$sI idle &gt;480 min</span>" } else { $null }
-$cSess    = _MgmtCard 'Sessions' $sT '#2c3e50' "<span style='color:#27ae60;font-weight:600'>$sA active</span>  $sD disconnected" $sessSub2 $null '#section-Sessions' (_TrendBadge 'Session Monitor' $(if ($rSess) { $rSess.IssueCount } else { 0 }) $prevCounts)
+$cSess    = _MgmtCard 'Sessions' $sT '#2c3e50' "<span style='color:#27ae60;font-weight:600'>$sA active</span>  $sD disconnected" $sessSub2 $null '#section-Sessions' ("$infoCardBadge " + (_TrendBadge 'Session Monitor' $(if ($rSess) { $rSess.IssueCount } else { 0 }) $prevCounts))
 
 # Lic. Usage
 $mLic   = if ($rLic) { [regex]::Match($rLic.Summary, '(\d+) license type.+?(\d+) above') } else { $null }
@@ -493,10 +494,10 @@ $allSections = ($results | ForEach-Object {
     $secId     = if ($_.SectionKey) { "section-$($_.SectionKey)" } else { '' }
     $isInfoSec = $_.PSObject.Properties['SectionKey'] -and $_.SectionKey -in $infoOnlyKeys
     $initState = if ($_.HasIssues -and -not $isInfoSec) { '0' } else { '1' }   # info-only starts collapsed
-    # Replace red/orange issue badges with blue INFORMATIONAL in section headers for info-only checks
+    # Replace any status badge (red/orange/green) with blue INFORMATIONAL in section headers for info-only checks
     if ($isInfoSec) {
         $html = [regex]::Replace($html,
-            "<span style='font-size:12px;background:#(?:e74c3c|f39c12);padding:4px 12px;border-radius:12px;font-weight:700'>[^<]+</span>",
+            "<span style='font-size:12px;background:#(?:e74c3c|f39c12|27ae60);padding:4px 12px;border-radius:12px;font-weight:700'>[^<]+</span>",
             "<span style='font-size:12px;background:#3498db;padding:4px 12px;border-radius:12px;font-weight:700'>INFORMATIONAL</span>")
     }
     $token = "<div style='margin-bottom:24px;"
