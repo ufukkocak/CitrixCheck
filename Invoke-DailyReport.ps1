@@ -457,8 +457,10 @@ $mgmtSummaryHtml = "<div style='background:#fff;border-left:1px solid #dde1e7;bo
 
 $reportDate       = Get-Date -Format 'dddd, d MMMM yyyy HH:mm'
 $totalChecks      = $results.Count
-# Exclude suppressed checks from the headline issue count
-$checksWithIssues = @($results | Where-Object { $_.HasIssues -and -not $_.Suppressed }).Count
+# Checks that are purely informational - never count toward the issue total or header colour
+$infoOnlyKeys     = @('VDAHealth', 'Sessions')
+# Exclude suppressed checks and info-only checks from the headline issue count
+$checksWithIssues = @($results | Where-Object { $_.HasIssues -and -not $_.Suppressed -and $_.SectionKey -notin $infoOnlyKeys }).Count
 $issueCountColor  = if ($checksWithIssues -gt 0) { '#e74c3c' } else { '#27ae60' }
 
 # Header colour: groen = alles OK, oranje = 1-2 checks met issues, rood = 3+ checks met issues
@@ -468,10 +470,11 @@ $headerText   = if ($checksWithIssues -eq 0) { 'ALL SYSTEMS OK' } elseif ($check
 # Summary table rows
 $summaryRows = foreach ($r in $results) {
     $isSup      = $r.PSObject.Properties['Suppressed'] -and $r.Suppressed
-    $icon       = if ($r.HasIssues) { '&#10007;' } else { '&#10003;' }
-    $iconColor  = if ($r.HasIssues -and -not $isSup) { '#e74c3c' } elseif ($r.HasIssues) { '#f39c12' } else { '#27ae60' }
-    $rowBg      = if ($r.HasIssues -and -not $isSup) { '#fff5f5' } elseif ($r.HasIssues) { '#fffdf0' } else { '' }
-    $resultText = if ($r.HasIssues -and $isSup) { "Issues found <span style='font-size:10px;background:#f39c12;color:#fff;padding:1px 6px;border-radius:8px;font-weight:700'>suppressed</span>" } elseif ($r.HasIssues) { 'Issues found' } else { 'OK' }
+    $isInfo     = $r.PSObject.Properties['SectionKey'] -and $r.SectionKey -in $infoOnlyKeys
+    $icon       = if ($r.HasIssues -and -not $isInfo) { '&#10007;' } else { '&#10003;' }
+    $iconColor  = if ($r.HasIssues -and -not $isSup -and -not $isInfo) { '#e74c3c' } elseif ($r.HasIssues -and -not $isInfo) { '#f39c12' } else { '#27ae60' }
+    $rowBg      = if ($r.HasIssues -and -not $isSup -and -not $isInfo) { '#fff5f5' } elseif ($r.HasIssues -and -not $isInfo) { '#fffdf0' } else { '' }
+    $resultText = if ($r.HasIssues -and $isSup) { "Issues found <span style='font-size:10px;background:#f39c12;color:#fff;padding:1px 6px;border-radius:8px;font-weight:700'>suppressed</span>" } elseif ($r.HasIssues -and $isInfo) { "OK <span style='font-size:10px;background:#3498db;color:#fff;padding:1px 6px;border-radius:8px;font-weight:700'>informational</span>" } elseif ($r.HasIssues) { 'Issues found' } else { 'OK' }
     $secHref    = if ($r.SectionKey) { "#section-$($r.SectionKey)" } else { '' }
     $nameCell   = if ($secHref) { "<a href='$secHref' style='color:#2c3e50;text-decoration:none;font-weight:500'>$($r.CheckName)</a>" } else { $r.CheckName }
     @"
@@ -655,18 +658,19 @@ try {
     $securePassword = $Config.Email.SmtpPassword | ConvertTo-SecureString -Key $smtpKey
     $smtpCredential = New-Object System.Management.Automation.PSCredential($Config.Email.SmtpUsername, $securePassword)
 
-    # Dynamic priority: High when 3+ unsuppressed checks have issues; Low when all OK
-    $issueCount     = @($results | Where-Object { $_.HasIssues }).Count
+    # Dynamic priority: High when 3+ unsuppressed/non-info checks have issues; Low when all OK
+    $issueCount     = @($results | Where-Object { $_.HasIssues -and $_.SectionKey -notin $infoOnlyKeys }).Count
     $mailPriority   = if ($Config.Email.Priority) { $Config.Email.Priority }
                       elseif ($issueCount -ge 3) { 'High' }
                       elseif ($issueCount -eq 0) { 'Low' }
                       else { 'Normal' }
 
     # Eenvoudige e-mailtekst — volledig rapport zit als bijlage
-    $statusColor = if ($overallIssues) { '#e74c3c' } else { '#27ae60' }
-    $statusLabel = if ($overallIssues) { "ATTENTION REQUIRED — $issueCount check(s) met issues" } else { 'ALL OK' }
+    $statusColor = if ($checksWithIssues -gt 0) { '#e74c3c' } else { '#27ae60' }
+    $statusLabel = if ($checksWithIssues -gt 0) { "ATTENTION REQUIRED — $issueCount check(s) with issues" } else { 'ALL OK' }
     $checkRows   = ($results | ForEach-Object {
-        $ico = if ($_.HasIssues) { "<span style='color:#e74c3c'>&#10008; $($_.IssueCount) issue(s)</span>" } else { "<span style='color:#27ae60'>&#10004; OK</span>" }
+        $isInfoRow = $_.PSObject.Properties['SectionKey'] -and $_.SectionKey -in $infoOnlyKeys
+        $ico = if ($_.HasIssues -and -not $isInfoRow) { "<span style='color:#e74c3c'>&#10008; $($_.IssueCount) issue(s)</span>" } else { "<span style='color:#27ae60'>&#10004; OK</span>" }
         "<tr><td style='padding:6px 14px;border-bottom:1px solid #eee'>$($_.CheckName)</td>" +
         "<td style='padding:6px 14px;border-bottom:1px solid #eee'>$ico</td>" +
         "<td style='padding:6px 14px;border-bottom:1px solid #eee;color:#555;font-size:12px'>$($_.Summary)</td></tr>"

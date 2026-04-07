@@ -236,7 +236,8 @@
       "Name": "CTX-NS-LB",
       "HostName": "10.0.0.66",
       "Protocol": "https",
-      "SkipCertificateCheck": true
+      "SkipCertificateCheck": true,
+      "IgnoreVServers": []
     }
   ],
   "NetScalerCredentials": {

@@ -223,6 +223,14 @@ function _QueryNSInstance {
         try { Invoke-RestMethod -Uri "$baseUrl/config/logout" -Method Post -Headers $headers -WebSession $webSession -ErrorAction Stop | Out-Null } catch { }
         $webSession = $null   # markeer als uitgelogd zodat catch-block het niet opnieuw doet
 
+        # Filter vServers listed in IgnoreVServers (e.g. redirect vServers that are intentionally DOWN)
+        $ignoreVSrvs = if ($NsCfg.PSObject.Properties['IgnoreVServers']) { @($NsCfg.IgnoreVServers) } else { @() }
+        if ($ignoreVSrvs.Count -gt 0) {
+            $lbVSrvs  = @($lbVSrvs  | Where-Object { $_.name -notin $ignoreVSrvs })
+            $csVSrvs  = @($csVSrvs  | Where-Object { $_.name -notin $ignoreVSrvs })
+            $vpnVSrvs = @($vpnVSrvs | Where-Object { $_.name -notin $ignoreVSrvs })
+        }
+
         $downVSrvs    = @(($lbVSrvs + $csVSrvs + $vpnVSrvs) | Where-Object { $_.state -ne 'UP' })
         $expiringCerts = @($sslCerts | Where-Object { [int]$_.daystoexpiration -le $WarnDays })
         $issueCount    = $downVSrvs.Count + $expiringCerts.Count
