@@ -42,19 +42,28 @@
     Website:    https://horizonconsulting.it
     LinkedIn:   https://www.linkedin.com/in/ufukkocak
     Created:    2026-03-15
-    Version:    1.0.0
+    Version:    1.1.0
 
     Changelog:
         1.0.0 - 2026-03-15 - Initial release.
+        1.1.0 - 2026-04-28 - Per-server threshold override: add DiskSpaceWarningPercent and
+                              DiskSpaceCriticalPercent to a server entry in config.json to set
+                              custom thresholds per server (e.g. PVS F-drive vDisk store).
 
     Requirements:
         - PowerShell 5.1 or higher.
         - WinRM / CIM access to all servers listed in config.json.
         - Permissions to query Win32_LogicalDisk via WMI (default admin share access).
 
-    Thresholds:
+    Thresholds (global, in config.json under Thresholds):
         Warning  - Config.Thresholds.DiskSpaceWarningPercent  (default: 20% free)
         Critical - Config.Thresholds.DiskSpaceCriticalPercent (default: 10% free)
+
+    Per-server threshold override (optional, in server entry in config.json):
+        DiskSpaceWarningPercent  - Overrides global warning threshold for this server
+        DiskSpaceCriticalPercent - Overrides global critical threshold for this server
+        Example: PVS server with F-drive at 15% free (= 85% used) yellow, 5% free (= 95% used) red:
+            "DiskSpaceWarningPercent": 15, "DiskSpaceCriticalPercent": 5
 
     Scheduling:
         Run daily via Windows Task Scheduler or call through Invoke-DailyReport.ps1.
@@ -85,6 +94,8 @@ function Invoke-DiskSpaceCheck {
 
             # Per-server override takes priority over the global filter
             $effectiveDriveFilter = if ($server.PSObject.Properties['DiskDriveFilter'] -and $server.DiskDriveFilter) { [string[]]$server.DiskDriveFilter } else { $driveFilter }
+            $effectiveWarnPct     = if ($server.PSObject.Properties['DiskSpaceWarningPercent']  -and $null -ne $server.DiskSpaceWarningPercent)  { [int]$server.DiskSpaceWarningPercent  } else { $warnPct }
+            $effectiveCritPct     = if ($server.PSObject.Properties['DiskSpaceCriticalPercent'] -and $null -ne $server.DiskSpaceCriticalPercent) { [int]$server.DiskSpaceCriticalPercent } else { $critPct }
 
             $reachable = Test-Connection -ComputerName $server.Name -Count 1 -Quiet -ErrorAction SilentlyContinue
             $drives    = [System.Collections.Generic.List[PSCustomObject]]::new()
@@ -102,7 +113,7 @@ function Invoke-DiskSpaceCheck {
                         $freeGB   = [math]::Round($disk.FreeSpace   / 1GB, 1)
                         $usedGB   = [math]::Round(($disk.Size - $disk.FreeSpace) / 1GB, 1)
                         $freePct  = if ($disk.Size -gt 0) { [math]::Round(($disk.FreeSpace / $disk.Size) * 100) } else { 0 }
-                        $severity = if ($freePct -le $critPct) { 'CRITICAL' } elseif ($freePct -le $warnPct) { 'WARNING' } else { 'OK' }
+                        $severity = if ($freePct -le $effectiveCritPct) { 'CRITICAL' } elseif ($freePct -le $effectiveWarnPct) { 'WARNING' } else { 'OK' }
 
                         if ($severity -ne 'OK') { $totalIssues++ }
 
@@ -138,6 +149,8 @@ function Invoke-DiskSpaceCheck {
                 Role      = $server.Role
                 Reachable = $reachable
                 Drives    = $drives
+                WarnPct   = $effectiveWarnPct
+                CritPct   = $effectiveCritPct
             })
         }
 
@@ -186,6 +199,10 @@ function _BuildDiskHtml {
         $reachColor = if ($srv.Reachable) { '#27ae60'  } else { '#e74c3c'  }
         $reachText  = if ($srv.Reachable) { 'Reachable' } else { 'UNREACHABLE' }
 
+        $customThresholdNote = if ($srv.WarnPct -ne $WarnPct -or $srv.CritPct -ne $CritPct) {
+            "<div style='padding:4px 12px;font-size:11px;color:#777;background:#fffdf0;border-bottom:1px solid #ffeaa7'>Custom threshold: <span style='color:#f39c12;font-weight:600'>warn &lt;$($srv.WarnPct)% free</span> &nbsp; <span style='color:#e74c3c;font-weight:600'>critical &lt;$($srv.CritPct)% free</span></div>"
+        } else { '' }
+
         $driveRows = ''
         if ($srv.Reachable -and $srv.Drives.Count -gt 0) {
             $driveRows = foreach ($d in ($srv.Drives | Sort-Object Drive)) {
@@ -229,6 +246,7 @@ function _BuildDiskHtml {
         <div style='padding:4px 12px;font-size:12px;background:#f8f9fa;border-bottom:1px solid #eee'>
           Reachability: <span style='color:$reachColor;font-weight:bold'>$reachIcon $reachText</span>
         </div>
+        $customThresholdNote
         $(if ($srv.Reachable -and $srv.Drives.Count -gt 0) {
             "<table style='width:100%;border-collapse:collapse'>
               <thead><tr style='background:#f4f6f8'>

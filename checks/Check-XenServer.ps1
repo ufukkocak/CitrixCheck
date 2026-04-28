@@ -51,7 +51,7 @@
     Website:    https://horizonconsulting.it
     LinkedIn:   https://www.linkedin.com/in/ufukkocak
     Created:    2026-03-19
-    Version:    1.2.0
+    Version:    1.4.0
 
     Changelog:
         1.0.0 - 2026-03-19 - Initial release.
@@ -59,6 +59,12 @@
                               Connect-XenServer with -SetDefaultSession -PassThru; per-host RRD CPU query;
                               Get-XenHostMetrics via -Ref $h.metrics; StrictMode-safe session access.
         1.2.0 - 2026-03-23 - Credential setup verwijzing gecorrigeerd naar Initialize-CitrixCheck.ps1.
+        1.3.0 - 2026-04-28 - Automatic pool master redirect: if the configured host is a pool slave
+                              (HOST_IS_SLAVE), the actual master is resolved and the connection is
+                              retried. Report shows a badge when master has changed.
+        1.4.0 - 2026-04-28 - Threshold defaults aligned with standard monitoring baselines:
+                              RAM warning 96% / critical 98%; SR storage warning 96% / critical 98%.
+                              Updated script defaults and HTML colour logic.
 
     Requirements:
         - PowerShell 5.1 or higher.
@@ -206,10 +212,10 @@ function Invoke-XenServerCheck {
         $thresholds = $Config.XenServer.Thresholds
         $cpuWarn    = if ($thresholds.CpuWarningPercent)     { [int]$thresholds.CpuWarningPercent }     else { 80 }
         $cpuCrit    = if ($thresholds.CpuCriticalPercent)    { [int]$thresholds.CpuCriticalPercent }    else { 90 }
-        $memWarn    = if ($thresholds.MemoryWarningPercent)  { [int]$thresholds.MemoryWarningPercent }  else { 85 }
-        $memCrit    = if ($thresholds.MemoryCriticalPercent) { [int]$thresholds.MemoryCriticalPercent } else { 95 }
-        $storWarn   = if ($thresholds.StorageWarningPercent) { [int]$thresholds.StorageWarningPercent } else { 80 }
-        $storCrit   = if ($thresholds.StorageCriticalPercent){ [int]$thresholds.StorageCriticalPercent} else { 90 }
+        $memWarn    = if ($thresholds.MemoryWarningPercent)  { [int]$thresholds.MemoryWarningPercent }  else { 96 }
+        $memCrit    = if ($thresholds.MemoryCriticalPercent) { [int]$thresholds.MemoryCriticalPercent } else { 98 }
+        $storWarn   = if ($thresholds.StorageWarningPercent) { [int]$thresholds.StorageWarningPercent } else { 96 }
+        $storCrit   = if ($thresholds.StorageCriticalPercent){ [int]$thresholds.StorageCriticalPercent} else { 98 }
 
         $poolResults  = [System.Collections.Generic.List[PSCustomObject]]::new()
         $totalIssues  = 0
@@ -220,35 +226,78 @@ function Invoke-XenServerCheck {
             Write-Verbose "Connecting to pool: $($poolDef.Name) via $($poolDef.Master)"
 
             $poolResult = [PSCustomObject]@{
-                Name       = $poolDef.Name
-                Master     = $poolDef.Master
-                Connected  = $false
-                Error      = $null
-                PoolLabel  = $poolDef.Name
-                MasterName = $poolDef.Master
-                HAEnabled  = $false
-                Hosts      = @()
-                SRs        = @()
-                IssueCount = 0
+                Name          = $poolDef.Name
+                Master        = $poolDef.Master
+                Connected     = $false
+                Error         = $null
+                PoolLabel     = $poolDef.Name
+                MasterName    = $poolDef.Master
+                HAEnabled     = $false
+                Hosts         = @()
+                SRs           = @()
+                IssueCount    = 0
+                ActualHost    = $poolDef.Master
+                WasRedirected = $false
             }
 
             try {
+                # Track actual host (may differ from config when pool master changes)
+                $actualServer = $poolDef.Master
+
                 # Connect — -PassThru geeft sessie-object terug voor RRD; -SetDefaultSession voor SDK cmdlets
                 $xenSession = $null
                 try {
-                    $xenSession = Connect-XenServer -Server $poolDef.Master `
+                    $xenSession = Connect-XenServer -Server $actualServer `
                         -UserName $plainUser -Password $plainPass `
                         -NoWarnCertificates -SetDefaultSession -PassThru -ErrorAction Stop
                 } catch {
-                    if ($_.Exception.Message -match 'NoWarnCertificates|PassThru|parameter') {
+                    $connectErr = $_
+                    $connectMsg = $connectErr.Exception.Message
+                    if ($connectMsg -match 'NoWarnCertificates|PassThru|parameter') {
                         try {
-                            $xenSession = Connect-XenServer -Server $poolDef.Master `
+                            $xenSession = Connect-XenServer -Server $actualServer `
                                 -UserName $plainUser -Password $plainPass `
                                 -SetDefaultSession -PassThru -ErrorAction Stop
                         } catch {
-                            Connect-XenServer -Server $poolDef.Master `
+                            Connect-XenServer -Server $actualServer `
                                 -UserName $plainUser -Password $plainPass `
                                 -SetDefaultSession -ErrorAction Stop
+                        }
+                    } elseif ($connectMsg -match 'HOST_IS_SLAVE|pool member') {
+                        # Configured host is a pool slave — resolve the actual master
+                        $masterTarget = $null
+                        try {
+                            $errDesc = $connectErr.Exception.ErrorDescription
+                            if ($errDesc -and $errDesc.Count -gt 1) { $masterTarget = $errDesc[1] }
+                        } catch { }
+                        # Fallback: extract IP address from error message
+                        if (-not $masterTarget -and $connectMsg -match '(\d{1,3}(?:\.\d{1,3}){3})') {
+                            $masterTarget = $Matches[1]
+                        }
+                        if (-not $masterTarget) { throw $connectErr }
+
+                        Write-Verbose "  Pool master changed: $actualServer -> $masterTarget (reconnecting)"
+                        $actualServer             = $masterTarget
+                        $poolResult.ActualHost    = $actualServer
+                        $poolResult.WasRedirected = $true
+
+                        # Connect to actual master (with SDK-version fallbacks)
+                        try {
+                            $xenSession = Connect-XenServer -Server $actualServer `
+                                -UserName $plainUser -Password $plainPass `
+                                -NoWarnCertificates -SetDefaultSession -PassThru -ErrorAction Stop
+                        } catch {
+                            if ($_.Exception.Message -match 'NoWarnCertificates|PassThru|parameter') {
+                                try {
+                                    $xenSession = Connect-XenServer -Server $actualServer `
+                                        -UserName $plainUser -Password $plainPass `
+                                        -SetDefaultSession -PassThru -ErrorAction Stop
+                                } catch {
+                                    Connect-XenServer -Server $actualServer `
+                                        -UserName $plainUser -Password $plainPass `
+                                        -SetDefaultSession -ErrorAction Stop
+                                }
+                            } else { throw }
                         }
                     } else {
                         throw
@@ -414,7 +463,8 @@ function Invoke-XenServerCheck {
                 Write-Warning "Pool $($poolDef.Name): $($_.Exception.Message)"
             }
             finally {
-                try { Disconnect-XenServer -Server $poolDef.Master -ErrorAction SilentlyContinue } catch { }
+                $disconnectHost = if ($actualServer) { $actualServer } else { $poolDef.Master }
+                try { Disconnect-XenServer -Server $disconnectHost -ErrorAction SilentlyContinue } catch { }
             }
 
             $poolResults.Add($poolResult)
@@ -511,6 +561,9 @@ function _BuildXenHtml {
         $vmCount    = if ($pool.Hosts) { [int]($pool.Hosts | Measure-Object -Property RunningVMs -Sum).Sum } else { 0 }
         $poolIssues = $pool.IssueCount
         $poolBadge  = if ($poolIssues -gt 0) { "<span style='font-size:11px;background:#e74c3c;color:#fff;padding:2px 8px;border-radius:10px;font-weight:700'>$poolIssues issue(s)</span>" } else { "<span style='font-size:11px;background:#27ae60;color:#fff;padding:2px 8px;border-radius:10px;font-weight:700'>OK</span>" }
+        $redirectNote = if ($pool.WasRedirected) {
+            "<span style='font-size:11px;background:#e67e22;color:#fff;padding:2px 8px;border-radius:10px;font-weight:600' title='Configured host ($($pool.Master)) is a pool slave. Connected to actual master.'>&#8594; master changed</span>"
+        } else { '' }
 
         # Host table rows
         $hostRows = foreach ($h in $pool.Hosts) {
@@ -525,9 +578,9 @@ function _BuildXenHtml {
 
             # RAM bar
             $memDisplay = if ($null -ne $h.MemPct) {
-                $memCol = if ($h.MemPct -ge 95) { '#e74c3c' } elseif ($h.MemPct -ge 85) { '#f39c12' } else { '#27ae60' }
+                $memCol = if ($h.MemPct -ge 98) { '#e74c3c' } elseif ($h.MemPct -ge 96) { '#f39c12' } else { '#27ae60' }
                 $memLabel = if ($h.MemTotGB) { "$($h.MemUsedGB) / $($h.MemTotGB) GB" } else { "$($h.MemPct)%" }
-                "<div style='display:flex;align-items:center;gap:5px'><div style='width:50px;background:#ecf0f1;border-radius:3px;height:6px'><div style='width:$($h.MemPct)%;background:$memCol;height:6px;border-radius:3px'></div></div><span style='font-size:12px;color:$memCol;font-weight:$(if($h.MemPct -ge 85){"bold"}else{"normal"})'>$memLabel</span></div>"
+                "<div style='display:flex;align-items:center;gap:5px'><div style='width:50px;background:#ecf0f1;border-radius:3px;height:6px'><div style='width:$($h.MemPct)%;background:$memCol;height:6px;border-radius:3px'></div></div><span style='font-size:12px;color:$memCol;font-weight:$(if($h.MemPct -ge 96){"bold"}else{"normal"})'>$memLabel</span></div>"
             } else { "<span style='color:#ccc;font-size:12px'>n/a</span>" }
 
             $issueText  = if ($h.Issues.Count -gt 0) { "<span style='color:#e74c3c;font-size:11px;font-weight:600'>$($h.Issues -join ', ')</span>" } else { '' }
@@ -551,8 +604,8 @@ function _BuildXenHtml {
 
         # Storage table rows
         $srRows = foreach ($sr in $pool.SRs) {
-            $srCol     = if ($sr.Pct -ge 90) { '#e74c3c' } elseif ($sr.Pct -ge 80) { '#f39c12' } else { '#27ae60' }
-            $srBg      = if ($sr.Pct -ge 80) { '#fff9f9' } else { '#fff' }
+            $srCol     = if ($sr.Pct -ge 98) { '#e74c3c' } elseif ($sr.Pct -ge 96) { '#f39c12' } else { '#27ae60' }
+            $srBg      = if ($sr.Pct -ge 96) { '#fff9f9' } else { '#fff' }
             $srShared  = if ($sr.Shared) { "<span style='color:#3498db'>Shared</span>" } else { "<span style='color:#95a5a6'>Local</span>" }
             @"
           <tr style='background:$srBg'>
@@ -567,7 +620,7 @@ function _BuildXenHtml {
                 <div style='width:60px;background:#ecf0f1;border-radius:3px;height:7px'>
                   <div style='width:$([math]::Min($sr.Pct,100))%;background:$srCol;height:7px;border-radius:3px'></div>
                 </div>
-                <span style='font-size:12px;color:$srCol;font-weight:$(if($sr.Pct -ge 80){"bold"}else{"normal"})'>$($sr.Pct)%</span>
+                <span style='font-size:12px;color:$srCol;font-weight:$(if($sr.Pct -ge 96){"bold"}else{"normal"})'>$($sr.Pct)%</span>
               </div>
             </td>
           </tr>
@@ -610,6 +663,7 @@ function _BuildXenHtml {
             $haStatus
             <span style='color:#777'>$hostCount hosts</span>
             <span style='color:#777'>$vmCount running VMs</span>
+            $redirectNote
             $poolBadge
           </div>
         </div>

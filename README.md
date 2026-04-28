@@ -354,8 +354,8 @@ All thresholds are configurable in `config.json` under `Thresholds`:
 
 | Setting | Default | Description |
 |---|---|---|
-| `DiskSpaceWarningPercent` | 20% | Disk space warning threshold |
-| `DiskSpaceCriticalPercent` | 10% | Disk space critical threshold |
+| `DiskSpaceWarningPercent` | 20% free | Disk space warning threshold (% free remaining) |
+| `DiskSpaceCriticalPercent` | 10% free | Disk space critical threshold (% free remaining) |
 | `LicenseUsageWarningPercent` | 85% | License usage warning threshold |
 | `LicenseUsageCriticalPercent` | 95% | License usage critical threshold |
 | `SSLCertExpiryWarningDays` | 30 days | SSL certificate expiry warning |
@@ -363,16 +363,28 @@ All thresholds are configurable in `config.json` under `Thresholds`:
 | `IdleSessionWarningMinutes` | 480 min (8 h) | Idle session threshold |
 | `LogonDurationWarningSeconds` | 60 sec | Logon duration warning |
 
+Per-server disk threshold override (optional, add to server entry in `config.json`):
+
+| Property | Description |
+|---|---|
+| `DiskSpaceWarningPercent` | Overrides global warning threshold for this server |
+| `DiskSpaceCriticalPercent` | Overrides global critical threshold for this server |
+
+Example — PVS server with vDisk F-drive at 85% used = yellow, 95% used = red:
+```json
+{ "Name": "CTX-PVS01", "DiskDriveFilter": ["C:","D:","F:"], "DiskSpaceWarningPercent": 15, "DiskSpaceCriticalPercent": 5 }
+```
+
 XenServer thresholds are configured under `XenServer.Thresholds`:
 
 | Setting | Default | Description |
 |---|---|---|
 | `CpuWarningPercent` | 80% | CPU usage warning threshold |
 | `CpuCriticalPercent` | 90% | CPU usage critical threshold |
-| `MemoryWarningPercent` | 85% | Memory usage warning threshold |
-| `MemoryCriticalPercent` | 95% | Memory usage critical threshold |
-| `StorageWarningPercent` | 80% | SR usage warning threshold |
-| `StorageCriticalPercent` | 90% | SR usage critical threshold |
+| `MemoryWarningPercent` | 96% | Memory usage warning threshold |
+| `MemoryCriticalPercent` | 98% | Memory usage critical threshold |
+| `StorageWarningPercent` | 96% | SR usage warning threshold |
+| `StorageCriticalPercent` | 98% | SR usage critical threshold |
 | `UptimeWarningDays` | 30 days | Host uptime warning (reboot recommended) |
 
 ---

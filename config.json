@@ -145,6 +145,8 @@
       "Name": "CTX-PVS01.ad.example.com",
       "Role": "Provisioning Services",
       "DiskDriveFilter": ["C:", "D:", "F:"],
+      "DiskSpaceWarningPercent": 15,
+      "DiskSpaceCriticalPercent": 5,
       "Services": [
         "Citrix PVS API Service",
         "Citrix PVS Soap Server",
@@ -157,6 +159,8 @@
       "Name": "CTX-PVS02.ad.example.com",
       "Role": "Provisioning Services",
       "DiskDriveFilter": ["C:", "D:", "F:"],
+      "DiskSpaceWarningPercent": 15,
+      "DiskSpaceCriticalPercent": 5,
       "Services": [
         "Citrix PVS API Service",
         "Citrix PVS Soap Server",
@@ -169,6 +173,8 @@
       "Name": "CTX-PVS03.ad.example.com",
       "Role": "Provisioning Services",
       "DiskDriveFilter": ["C:", "D:", "F:"],
+      "DiskSpaceWarningPercent": 15,
+      "DiskSpaceCriticalPercent": 5,
       "Services": [
         "Citrix PVS API Service",
         "Citrix PVS Soap Server",
@@ -181,6 +187,8 @@
       "Name": "CTX-PVS04.ad.example.com",
       "Role": "Provisioning Services",
       "DiskDriveFilter": ["C:", "D:", "F:"],
+      "DiskSpaceWarningPercent": 15,
+      "DiskSpaceCriticalPercent": 5,
       "Services": [
         "Citrix PVS API Service",
         "Citrix PVS Soap Server",
@@ -270,10 +278,10 @@
     "Thresholds": {
       "CpuWarningPercent": 80,
       "CpuCriticalPercent": 90,
-      "MemoryWarningPercent": 85,
-      "MemoryCriticalPercent": 95,
-      "StorageWarningPercent": 80,
-      "StorageCriticalPercent": 90,
+      "MemoryWarningPercent": 96,
+      "MemoryCriticalPercent": 98,
+      "StorageWarningPercent": 96,
+      "StorageCriticalPercent": 98,
       "UptimeWarningDays": 30
     }
   }
