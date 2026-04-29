@@ -232,20 +232,28 @@
       "Name": "CTX-NS-EXT",
       "HostName": "192.168.1.100",
       "Protocol": "https",
-      "SkipCertificateCheck": true
+      "SkipCertificateCheck": true,
+      "IgnoreVServers": [
+        "VSERVER_VPN_EXAMPLE1",
+        "VSERVER_VPN_EXAMPLE2"
+      ]
     },
     {
       "Name": "CTX-NS-INT",
       "HostName": "10.0.0.51",
       "Protocol": "https",
-      "SkipCertificateCheck": true
+      "SkipCertificateCheck": true,
+      "IgnoreVServers": []
     },
     {
       "Name": "CTX-NS-LB",
       "HostName": "10.0.0.66",
       "Protocol": "https",
       "SkipCertificateCheck": true,
-      "IgnoreVServers": []
+      "IgnoreVServers": [
+        "VSERVER_LB_EXAMPLE_redirect_80",
+        "VSERVER_LB_EXAMPLE_redirect_443"
+      ]
     }
   ],
   "NetScalerCredentials": {
