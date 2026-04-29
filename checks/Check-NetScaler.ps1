@@ -56,7 +56,7 @@
     Website:    https://horizonconsulting.it
     LinkedIn:   https://www.linkedin.com/in/ufukkocak
     Created:    2026-03-15
-    Version:    1.2.0
+    Version:    1.3.0
 
     Changelog:
         1.0.0 - 2026-03-15 - Initial release.
@@ -68,6 +68,8 @@
                               in config.json (NetScalerCredentials section). Per-request
                               error handling via _NitroGet helper; StrictMode-safe property
                               access via PSObject.Properties; TLS 1.2 enforced.
+        1.3.0 - 2026-04-29 - IgnoreVServers now configured per instance for all three
+                              appliances in config.json (EXT, INT, LB).
 
     Requirements:
         - PowerShell 5.1 or higher.
